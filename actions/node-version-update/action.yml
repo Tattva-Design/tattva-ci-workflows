@@ -1,19 +1,11 @@
 name: Node Version Update
-description: Bump a Node package version, commit the change, create a tag, and push both.
+description: Bump a Node package version with npm, create a git tag, and push both.
 
 inputs:
   working-directory:
     description: Directory containing the package.json file.
     required: false
     default: .
-  package-file:
-    description: Relative path to the package.json file from the working directory.
-    required: false
-    default: package.json
-  lock-file:
-    description: Relative path to the package lock file from the working directory.
-    required: false
-    default: package-lock.json
   bump-type:
     description: Version increment to apply.
     required: false
@@ -42,13 +34,13 @@ inputs:
 outputs:
   old-version:
     description: Previous package version.
-    value: ${{ steps.bump.outputs.old-version }}
+    value: ${{ steps.version.outputs.old-version }}
   new-version:
     description: Updated package version.
-    value: ${{ steps.bump.outputs.new-version }}
+    value: ${{ steps.version.outputs.new-version }}
   tag:
     description: Created git tag.
-    value: ${{ steps.bump.outputs.tag }}
+    value: ${{ steps.version.outputs.tag }}
 
 runs:
   using: composite
@@ -59,43 +51,33 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       run: |
         set -euo pipefail
-        PACKAGE_FILE="${{ inputs.package-file }}"
-        VERSION=$(node -p "require('./${PACKAGE_FILE}').version")
+        VERSION=$(node -p "require('./package.json').version")
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-    - name: Bump package version
-      id: bump
+    - name: Configure git author
+      shell: bash
+      run: |
+        git config user.name "${{ inputs.git-user-name }}"
+        git config user.email "${{ inputs.git-user-email }}"
+
+    - name: Bump version
+      id: version
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: |
         set -euo pipefail
 
-        PACKAGE_FILE="${{ inputs.package-file }}"
-        LOCK_FILE="${{ inputs.lock-file }}"
-        BUMP_TYPE="${{ inputs.bump-type }}"
-        TAG_PREFIX="${{ inputs.tag-prefix }}"
-
         OLD_VERSION="${{ steps.current.outputs.version }}"
-        NEW_VERSION=$(npm version "$BUMP_TYPE" --no-git-tag-version)
+        NEW_VERSION=$(npm version "${{ inputs.bump-type }}" -m "${{ inputs.commit-message }}")
         NEW_VERSION="${NEW_VERSION#v}"
-        TAG="${TAG_PREFIX}${NEW_VERSION}"
+        TAG="${{ inputs.tag-prefix }}${NEW_VERSION}"
 
         echo "old-version=$OLD_VERSION" >> "$GITHUB_OUTPUT"
         echo "new-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
         echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-        git config user.name "${{ inputs.git-user-name }}"
-        git config user.email "${{ inputs.git-user-email }}"
-
-        git add "$PACKAGE_FILE"
-        if [ -f "$LOCK_FILE" ]; then
-          git add "$LOCK_FILE"
-        fi
-
-        COMMIT_MESSAGE="${{ inputs.commit-message }}"
-        COMMIT_MESSAGE="${COMMIT_MESSAGE//%s/$NEW_VERSION}"
-
-        git commit -m "$COMMIT_MESSAGE"
-        git tag "$TAG"
-        git push origin "HEAD:${{ inputs.branch }}"
-        git push origin "$TAG"
+    - name: Push commit and tag
+      shell: bash
+      run: |
+        set -euo pipefail
+        git push origin "HEAD:${{ inputs.branch }}" --follow-tags
