@@ -1,0 +1,68 @@
+name: Node Version Update
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: Runner label for the release job.
+        required: false
+        type: string
+        default: ubuntu-latest
+      node-version:
+        description: Node.js version for npm version execution.
+        required: false
+        type: string
+        default: "22"
+      bump-type:
+        description: Version increment to apply.
+        required: false
+        type: string
+        default: patch
+      branch:
+        description: Branch to push the release commit to.
+        required: false
+        type: string
+        default: master
+      git-user-name:
+        description: Git author name for the automated release commit.
+        required: false
+        type: string
+        default: github-actions
+      git-user-email:
+        description: Git author email for the automated release commit.
+        required: false
+        type: string
+        default: github-actions@github.com
+      commit-message:
+        description: npm version commit message template.
+        required: false
+        type: string
+        default: "chore(release): %s [skip ci]"
+
+jobs:
+  bump_and_tag:
+    runs-on: ${{ inputs.runs-on }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js ${{ inputs.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Configure git author
+        run: |
+          git config user.name "${{ inputs.git-user-name }}"
+          git config user.email "${{ inputs.git-user-email }}"
+
+      - name: Bump version
+        run: |
+          npm version "${{ inputs.bump-type }}" -m "${{ inputs.commit-message }}"
+
+      - name: Push commit and tag
+        run: |
+          git push origin "HEAD:${{ inputs.branch }}" --follow-tags
