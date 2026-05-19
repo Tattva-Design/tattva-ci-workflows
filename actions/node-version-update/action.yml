@@ -1,0 +1,101 @@
+name: Node Version Update
+description: Bump a Node package version, commit the change, create a tag, and push both.
+
+inputs:
+  working-directory:
+    description: Directory containing the package.json file.
+    required: false
+    default: .
+  package-file:
+    description: Relative path to the package.json file from the working directory.
+    required: false
+    default: package.json
+  lock-file:
+    description: Relative path to the package lock file from the working directory.
+    required: false
+    default: package-lock.json
+  bump-type:
+    description: Version increment to apply.
+    required: false
+    default: patch
+  branch:
+    description: Branch to push the version bump commit to.
+    required: false
+    default: master
+  tag-prefix:
+    description: Prefix used when creating the git tag.
+    required: false
+    default: v
+  git-user-name:
+    description: Git author name for the automated commit.
+    required: false
+    default: github-actions
+  git-user-email:
+    description: Git author email for the automated commit.
+    required: false
+    default: github-actions@github.com
+  commit-message:
+    description: Commit message template. Use %s as the version placeholder.
+    required: false
+    default: 'chore(release): bump version to %s [skip ci]'
+
+outputs:
+  old-version:
+    description: Previous package version.
+    value: ${{ steps.bump.outputs.old-version }}
+  new-version:
+    description: Updated package version.
+    value: ${{ steps.bump.outputs.new-version }}
+  tag:
+    description: Created git tag.
+    value: ${{ steps.bump.outputs.tag }}
+
+runs:
+  using: composite
+  steps:
+    - name: Read current version
+      id: current
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+        PACKAGE_FILE="${{ inputs.package-file }}"
+        VERSION=$(node -p "require('./${PACKAGE_FILE}').version")
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+    - name: Bump package version
+      id: bump
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+
+        PACKAGE_FILE="${{ inputs.package-file }}"
+        LOCK_FILE="${{ inputs.lock-file }}"
+        BUMP_TYPE="${{ inputs.bump-type }}"
+        TAG_PREFIX="${{ inputs.tag-prefix }}"
+
+        OLD_VERSION="${{ steps.current.outputs.version }}"
+        NEW_VERSION=$(npm version "$BUMP_TYPE" --no-git-tag-version)
+        NEW_VERSION="${NEW_VERSION#v}"
+        TAG="${TAG_PREFIX}${NEW_VERSION}"
+
+        echo "old-version=$OLD_VERSION" >> "$GITHUB_OUTPUT"
+        echo "new-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+        echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+        git config user.name "${{ inputs.git-user-name }}"
+        git config user.email "${{ inputs.git-user-email }}"
+
+        git add "$PACKAGE_FILE"
+        if [ -f "$LOCK_FILE" ]; then
+          git add "$LOCK_FILE"
+        fi
+
+        COMMIT_MESSAGE="${{ inputs.commit-message }}"
+        COMMIT_MESSAGE="${COMMIT_MESSAGE//%s/$NEW_VERSION}"
+
+        git commit -m "$COMMIT_MESSAGE"
+        git tag "$TAG"
+        git push origin "HEAD:${{ inputs.branch }}"
+        git push origin "$TAG"
