@@ -36,6 +36,8 @@ on:
 jobs:
   app-checks:
     runs-on: ${{ inputs.runs-on }}
+    env:
+      SSH_KEY: ${{ secrets['ssh-key'] }}
 
     steps:
       - uses: actions/checkout@v4
@@ -48,13 +50,13 @@ jobs:
           cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
 
       - name: Setup SSH for private GitHub repos
-        if: ${{ secrets['ssh-key'] != '' }}
+        if: ${{ env.SSH_KEY != '' }}
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets['ssh-key'] }}
+          ssh-private-key: ${{ env.SSH_KEY }}
 
       - name: Add GitHub to known_hosts
-        if: ${{ secrets['ssh-key'] != '' }}
+        if: ${{ env.SSH_KEY != '' }}
         shell: bash
         run: |
           set -euo pipefail
