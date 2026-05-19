@@ -1,0 +1,77 @@
+name: Branch Name Check
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: Runner label for the branch validation job.
+        required: false
+        type: string
+        default: ubuntu-latest
+      protected-branches:
+        description: JSON array of protected branches to skip validation for.
+        required: false
+        type: string
+        default: '["main","develop","master"]'
+      feature-pattern:
+        description: Regex for valid feature branches.
+        required: false
+        type: string
+        default: '^feat/[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+$'
+      fix-pattern:
+        description: Regex for valid fix branches.
+        required: false
+        type: string
+        default: '^fix/[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+$'
+      copilot-pattern:
+        description: Regex for valid copilot branches.
+        required: false
+        type: string
+        default: '^copilot/[a-zA-Z0-9_-]+$'
+
+jobs:
+  branch-name-check:
+    runs-on: ${{ inputs.runs-on }}
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && !contains(fromJson(inputs.protected-branches), github.ref_name))
+
+    steps:
+      - name: Check branch name format
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BRANCH_NAME="${{ github.head_ref }}"
+          else
+            BRANCH_NAME="${{ github.ref_name }}"
+          fi
+
+          echo "Checking branch name: $BRANCH_NAME"
+
+          if [[ "$BRANCH_NAME" =~ ^(main|develop|master)$ ]]; then
+            echo "Skipping validation for protected branch: $BRANCH_NAME"
+            exit 0
+          fi
+
+          if [[ "$BRANCH_NAME" =~ ${{ inputs.feature-pattern }} ]]; then
+            echo "Valid feature branch name: $BRANCH_NAME"
+            exit 0
+          fi
+
+          if [[ "$BRANCH_NAME" =~ ${{ inputs.fix-pattern }} ]]; then
+            echo "Valid fix branch name: $BRANCH_NAME"
+            exit 0
+          fi
+
+          if [[ "$BRANCH_NAME" =~ ${{ inputs.copilot-pattern }} ]]; then
+            echo "Valid copilot branch name: $BRANCH_NAME"
+            exit 0
+          fi
+
+          echo "Invalid branch name: $BRANCH_NAME"
+          echo
+          echo "Branch name must follow one of these patterns:"
+          echo "  - feat/<username>/<description>"
+          echo "  - fix/<username>/<description>"
+          echo "  - copilot/<description>"
+          exit 1

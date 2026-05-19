@@ -1,0 +1,76 @@
+name: Node App Checks
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: Runner label for the app checks job.
+        required: false
+        type: string
+        default: ubuntu-latest
+      node-version:
+        description: Node.js version used for install and check steps.
+        required: false
+        type: string
+        default: "22.x"
+      working-directory:
+        description: Working directory for npm commands.
+        required: false
+        type: string
+        default: .
+      install-command:
+        description: Shell command used to install dependencies.
+        required: false
+        type: string
+        default: "npm ci"
+      check-command:
+        description: Shell command used to validate the app.
+        required: false
+        type: string
+        default: "npm run check"
+    secrets:
+      ssh-key:
+        description: SSH private key for private GitHub dependencies.
+        required: false
+
+jobs:
+  app-checks:
+    runs-on: ${{ inputs.runs-on }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ inputs.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+      - name: Setup SSH for private GitHub repos
+        if: ${{ secrets.ssh-key != '' }}
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.ssh-key }}
+
+      - name: Add GitHub to known_hosts
+        if: ${{ secrets.ssh-key != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+      - name: Install dependencies
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          set -euo pipefail
+          ${{ inputs.install-command }}
+
+      - name: Run checks
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          set -euo pipefail
+          ${{ inputs.check-command }}
