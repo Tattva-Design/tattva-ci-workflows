@@ -6,6 +6,10 @@ inputs:
     description: Directory containing the package.json file.
     required: false
     default: .
+  node-version:
+    description: Node.js version used for the release step.
+    required: false
+    default: "22"
   bump-type:
     description: Version increment to apply.
     required: false
@@ -45,6 +49,16 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Use Node.js ${{ inputs.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
     - name: Read current version
       id: current
       shell: bash
