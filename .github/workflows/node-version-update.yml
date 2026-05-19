@@ -1,0 +1,93 @@
+name: Node Version Update
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: Runner label for the release job.
+        required: false
+        type: string
+        default: ubuntu-latest
+      working-directory:
+        description: Directory containing the package.json file.
+        required: false
+        type: string
+        default: .
+      node-version:
+        description: Node.js version used for the release step.
+        required: false
+        type: string
+        default: "22"
+      bump-type:
+        description: Version increment to apply.
+        required: false
+        type: string
+        default: patch
+      branch:
+        description: Branch to push the version bump commit to.
+        required: false
+        type: string
+        default: master
+      git-user-name:
+        description: Git author name for the automated commit.
+        required: false
+        type: string
+        default: github-actions
+      git-user-email:
+        description: Git author email for the automated commit.
+        required: false
+        type: string
+        default: github-actions@github.com
+      commit-message:
+        description: Commit message template. Use %s as the version placeholder.
+        required: false
+        type: string
+        default: "chore(release): %s [skip ci]"
+
+jobs:
+  bump_and_tag:
+    runs-on: ${{ inputs.runs-on }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js ${{ inputs.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Read current version
+        id: current
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Configure git author
+        shell: bash
+        run: |
+          git config user.name "${{ inputs.git-user-name }}"
+          git config user.email "${{ inputs.git-user-email }}"
+
+      - name: Bump version
+        id: version
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          set -euo pipefail
+          OLD_VERSION="${{ steps.current.outputs.version }}"
+          NEW_VERSION=$(npm version "${{ inputs.bump-type }}" -m "${{ inputs.commit-message }}")
+          NEW_VERSION="${NEW_VERSION#v}"
+          echo "old-version=$OLD_VERSION" >> "$GITHUB_OUTPUT"
+          echo "new-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Push commit and tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin "HEAD:${{ inputs.branch }}" --follow-tags
