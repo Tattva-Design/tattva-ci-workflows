@@ -5,10 +5,22 @@ on:
     types: [closed]
     branches:
       - master
+  workflow_call:
+    inputs:
+      git-user-name:
+        description: 'Git user name for tagging'
+        required: false
+        type: string
+        default: 'github-actions'
+      git-user-email:
+        description: 'Git user email for tagging'
+        required: false
+        type: string
+        default: 'github-actions@github.com'
 
 jobs:
   create-tag:
-    if: github.event.pull_request.merged == true
+    if: github.event.pull_request.merged == true || github.event_name == 'workflow_call'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -37,7 +49,7 @@ jobs:
       - name: Create and push tag
         if: steps.check_tag.outputs.exists == 'false'
         run: |
-          `git config --global user.name "${{ inputs.git-user-name }}"
+          git config --global user.name "${{ inputs.git-user-name }}"
           git config --global user.email "${{ inputs.git-user-email }}"
           git tag ${{ steps.get_version.outputs.version }}
           git push origin ${{ steps.get_version.outputs.version }}
