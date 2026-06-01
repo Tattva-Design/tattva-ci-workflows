@@ -28,12 +28,26 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Read version from composer.json
+      - name: Configure Git
+        run: |
+          git config --global user.name "${{ inputs.git-user-name }}"
+          git config --global user.email "${{ inputs.git-user-email }}"
+
+      - name: Bump version in composer.json
         id: get_version
         run: |
-          VERSION=$(node -p "require('./composer.json').version")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          NEW_VERSION=$(node -e "
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('./composer.json', 'utf8'));
+            const parts = data.version.split('.');
+            parts[2] = (parseInt(parts[2], 10) || 0) + 1;
+            data.version = parts.join('.');
+            fs.writeFileSync('./composer.json', JSON.stringify(data, null, 4) + '\n');
+          ")
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
       - name: Check if tag exists
         id: check_tag
@@ -46,10 +60,10 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create and push tag
+      - name: Commit, push version bump and tag
         if: steps.check_tag.outputs.exists == 'false'
         run: |
-          git config --global user.name "${{ inputs.git-user-name }}"
-          git config --global user.email "${{ inputs.git-user-email }}"
+          git add composer.json
+          git commit -m "chore(release): bump version to ${{ steps.get_version.outputs.version }} [skip ci]"
           git tag ${{ steps.get_version.outputs.version }}
-          git push origin ${{ steps.get_version.outputs.version }}
+          git push origin HEAD:master --tags
